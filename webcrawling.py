@@ -44,3 +44,9 @@ if __name__ == "__main__":
     # Example URL to start crawling
     start_url = 'https://www.t-systems.com/de/de'
     extracted_texts = crawl_webpage(start_url, max_depth=1)  # Specify the maximum depth of crawling
+
+    #storing texts 
+    # for i, text in enumerate(extracted_texts):
+    #     filename = f"./data/doc_{i}.txt"
+    # with open(filename, "w") as f:
+    #     f.write(text)
