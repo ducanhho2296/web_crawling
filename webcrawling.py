@@ -1,51 +1,61 @@
-import requests
+import asyncio
+import aiohttp
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+import nest_asyncio
 
-# Function to recursively crawl a webpage up to a specified depth and return extracted text
-def crawl_webpage(url, max_depth, current_depth=0):
+
+nest_asyncio.apply()
+
+async def fetch_url(session, url):
+    try:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            return await response.text()
+    except aiohttp.ClientError as e:
+        print(f"Error fetching {url}: {e}")
+        return None
+
+async def crawl_webpage_async(url, max_depth, current_depth=0):
     if current_depth > max_depth:
         return []
 
     try:
-        # Make an HTTP GET request to the URL
-        response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
+        async with aiohttp.ClientSession() as session:
+            response_text = await fetch_url(session, url)
+            if not response_text:
+                return []
 
-        # Parse the HTML content of the webpage
-        soup = BeautifulSoup(response.content, 'html.parser')
+            soup = BeautifulSoup(response_text, 'html.parser')
+            text_content = []
+            for element in soup.find_all(string=True):
+                if element.parent.name not in ['script', 'style']:
+                    text_content.append(element.strip())
+            webpage_text = ' '.join(text_content)
 
-        # Extract visible text content from the current page
-        text_content = []
-        for element in soup.find_all(string=True):
-            if element.parent.name not in ['script', 'style']:
-                text_content.append(element.strip())
-        webpage_text = ' '.join(text_content)
+            print(f"Depth {current_depth}: {url}")
 
-        # Print or store the extracted text content
-        print(f"Depth {current_depth}: {url}")
-        # print(webpage_text[:200])  # Print a snippet of the extracted text
+            links = [link['href'] for link in soup.find_all('a', href=True)]
+            extracted_texts = [webpage_text]
 
-        # Find and crawl links to other pages (e.g., tabs or sections)
-        links = [link['href'] for link in soup.find_all('a', href=True)]
-        extracted_texts = [webpage_text]  # Start with the current page's text
+            tasks = []
+            for link in links:
+                absolute_link = urljoin(url, link)
+                tasks.append(crawl_webpage_async(absolute_link, max_depth, current_depth + 1))
 
-        for link in links:
-            absolute_link = urljoin(url, link)  # Convert relative URLs to absolute URLs
-            extracted_texts += crawl_webpage(absolute_link, max_depth, current_depth + 1)
+            extracted_texts += await asyncio.gather(*tasks)
 
-        return extracted_texts
+            return extracted_texts
 
-    except requests.exceptions.RequestException as e:
+    except aiohttp.ClientError as e:
         print(f"Error crawling {url}: {e}")
         return []
 
 if __name__ == "__main__":
-    # Example URL to start crawling
     start_url = 'https://www.t-systems.com/de/de'
-    extracted_texts = crawl_webpage(start_url, max_depth=1)  # Specify the maximum depth of crawling
-
-    #storing texts 
+    loop = asyncio.get_event_loop()
+    extracted_texts = loop.run_until_complete(crawl_webpage_async(start_url, max_depth=1))
+        #storing texts 
     # for i, text in enumerate(extracted_texts):
     #     filename = f"./data/doc_{i}.txt"
     # with open(filename, "w") as f:
